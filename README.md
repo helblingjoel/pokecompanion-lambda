@@ -1,6 +1,6 @@
 # pokecompanion-lambda
 
-Lambda that will compare a DB to the main git repo and trigger an update
+Collecion of Lambdas to periodically poll the PokeAPI to get high-level exports.
 
 ## supervisor
 
@@ -31,3 +31,7 @@ Once the Pocketbase entry is update, the worker's repsonsibility ends. It is not
 The redeploy function should be triggered when the Queue is known to have been processed.
 
 It will authentication against the Pocketbase instance, create an export of the static collections and update a new deployment of the Pokecompanion - if and only if there have been changes.
+
+# Architecture diagram
+
+![Diagram](.github/diagram.svg)

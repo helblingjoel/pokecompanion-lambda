@@ -1,0 +1,30 @@
+{
+	"name": "pokecompanion-lambda",
+	"version": "1.0.0",
+	"description": "Collection of serverless functions required to auto-update the Pokecompanion",
+	"main": "index.js",
+	"type": "module",
+	"scripts": {
+		"test": "jest"
+	},
+	"author": "Joel Helbling",
+	"license": "ISC",
+	"dependencies": {
+		"@aws-sdk/client-sqs": "^3.485.0",
+		"@octokit/rest": "^20.0.2",
+		"pocketbase": "^0.20.1"
+	},
+	"devDependencies": {
+		"@semantic-release/changelog": "^6.0.3",
+		"@semantic-release/github": "^9.2.6",
+		"semantic-release": "^22.0.12"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/helblingjoel/pokecompanion-lambda.git"
+	},
+	"bugs": {
+		"url": "https://github.com/helblingjoel/pokecompanion-lambda/issues"
+	},
+	"homepage": "https://github.com/helblingjoel/pokecompanion-lambda#readme"
+}

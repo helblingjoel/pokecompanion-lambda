@@ -1,0 +1,47 @@
+name: Release Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Remove sqs sdk
+        run: npm rm @aws-sdk/client-sqs
+
+      - name: Create redeploy .zip file
+        run: zip -r redeploy.zip redeploy.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Create worker .zip file
+        run: zip -r worker.zip worker.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Add sqs sdk
+        run: npm i @aws-sdk/client-sqs
+
+      - name: Create supervisor .zip file
+        run: zip -r supervisor.zip supervisor.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Run semantic-release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

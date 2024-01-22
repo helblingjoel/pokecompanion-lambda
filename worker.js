@@ -219,10 +219,8 @@ async function processMove(pb, ids) {
 	console.log(`Move - Parsed API Responses`);
 
 	const pbData = moveBodies.map((body) => {
-		const id = body.id;
-
 		return {
-			id,
+			move_id: body.id,
 			en: body.names.find((entry) => {
 				return entry.language.name === "en";
 			})?.name,
@@ -250,7 +248,7 @@ async function processMove(pb, ids) {
 	// Non-existing entries will reject
 	const allExistingEntries = await Promise.allSettled(
 		pbData.map((entry) => {
-			return pb.collection("moves").getFirstListItem(`id=${entry.id}`);
+			return pb.collection("moves").getFirstListItem(`move_id=${entry.id}`);
 		})
 	);
 
@@ -268,14 +266,14 @@ async function processMove(pb, ids) {
 	// Find all entries that already exist and need to be updated
 	const updateEntries = pbData.filter((a) => {
 		return existingEntries.some((b) => {
-			return a.id === b.id;
+			return a.move_id === b.move_id;
 		});
 	});
 
 	// Find all entries that are new
 	const newEntries = pbData.filter((a) => {
 		return existingEntries.every((b) => {
-			return a.id !== b.id;
+			return a.move_id !== b.move_id;
 		});
 	});
 
@@ -287,7 +285,7 @@ async function processMove(pb, ids) {
 	const updatedResults = await Promise.allSettled(
 		updateEntries.map((entry) => {
 			const existingEntry = existingEntries.find((a) => {
-				return a.id === b.id;
+				return a.move_id === b.move_id;
 			});
 			return pb.collection("moves").update(existingEntry.id, entry);
 		})

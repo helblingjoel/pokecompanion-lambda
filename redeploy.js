@@ -213,12 +213,12 @@ async function updateMoveGithub(pb) {
 
 const moveDbToJson = async (pb) => {
 	const moves = await pb.collection("moves").getFullList({
-		sort: "id",
+		sort: "move_id",
 	});
 
 	const normalisedDb = moves.map((entry) => {
 		return {
-			id: entry.id,
+			id: entry.move_id,
 			names: [
 				{
 					en: entry.en,

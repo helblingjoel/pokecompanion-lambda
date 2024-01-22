@@ -4,6 +4,8 @@ import { getAuthedPb } from "./pocketbase.js";
 
 const folderLocation = "/src/lib/data";
 const pokemonFileName = "/pokemonNames.json";
+const moveFileName = "/moves.json";
+
 const octokit = new Octokit({ auth: process.env.GITHUB_PAT });
 
 export async function handler(event, context) {
@@ -28,18 +30,30 @@ export async function handler(event, context) {
 		const result = await updatePokemonGithub(pb);
 
 		if (result) {
-			console.log(`Updated: ${JSON.stringify(result)}`);
+			console.log(`Pokemon Updated: ${JSON.stringify(result)}`);
 		} else {
-			console.log("No changes");
+			console.log("No Pokemon changes");
 		}
 	} catch (err) {
-		console.error("Error", err);
+		console.error("Pokemon - Error", err);
+	}
+
+	try {
+		const result = await updateMoveGithub(pb);
+
+		if (result) {
+			console.log(`Updated: ${JSON.stringify(result)}`);
+		} else {
+			console.log("No move changes");
+		}
+	} catch (err) {
+		console.error(`Moves - Error ${err}`);
 	}
 }
 
-const getExistingPokemonFile = async () => {
+const getExistingFile = async (filename) => {
 	const gitPokemonRequest = await fetch(
-		`https://raw.githubusercontent.com/helblingjoel/pokecompanion/main${folderLocation}${pokemonFileName}`
+		`https://raw.githubusercontent.com/helblingjoel/pokecompanion/main${folderLocation}${filename}`
 	);
 	return await gitPokemonRequest.json();
 };
@@ -86,7 +100,7 @@ function findDifferences(sortedDb, sortedGit) {
 
 	const moreEntries =
 		sortedDb.length > sortedGit.length ? sortedDb.length : sortedGit.length;
-	console.log("Highest Pokedex ID", moreEntries);
+	console.log("Highest ID", moreEntries);
 	for (let i = 0; i < moreEntries; i++) {
 		if (
 			JSON.stringify(sortedDb[i]?.names) !==
@@ -106,7 +120,7 @@ function findDifferences(sortedDb, sortedGit) {
 
 async function updatePokemonGithub(pb) {
 	const [pokemonGithub, pokemonDb] = await Promise.all([
-		getExistingPokemonFile(),
+		getExistingFile(pokemonFileName),
 		pokemonDbToJson(pb),
 	]);
 
@@ -150,6 +164,89 @@ async function updatePokemonGithub(pb) {
 
 	return differences;
 }
+
+async function updateMoveGithub(pb) {
+	const [moveGithub, moveDb] = await Promise.all([
+		getExistingFile(moveFileName),
+		moveDbToJson(pb),
+	]);
+
+	const sortedDb = moveDb.sort((a, b) => {
+		return a.id > b.id ? 1 : -1;
+	});
+
+	const sortedGit = moveGithub.sort((a, b) => {
+		return a.id > b.id ? 1 : -1;
+	});
+
+	const differences = findDifferences(sortedDb, sortedGit);
+
+	if (differences.length === 0) {
+		return false;
+	}
+
+	const content = Buffer.from(JSON.stringify(sortedDb)).toString("base64");
+
+	const sha = await getFileSha(
+		"helblingjoel",
+		"pokecompanion",
+		"src/lib/data/moves.json"
+	);
+
+	// Commit the changes to the main branch of the GitHub repository
+	await octokit.repos.createOrUpdateFileContents({
+		owner: "helblingjoel",
+		repo: "pokecompanion",
+		path: "src/lib/data/moves.json",
+		message: `Auto: ${differences.length} updates syncd\n${differences
+			.map((diff) => {
+				return `Move ${diff.index}`;
+			})
+			.join("\n")}`,
+		content: content,
+		sha,
+		branch: "main",
+	});
+
+	return differences;
+}
+
+const moveDbToJson = async (pb) => {
+	const moves = await pb.collection("moves").getFullList({
+		sort: "id",
+	});
+
+	const normalisedDb = moves.map((entry) => {
+		return {
+			id: entry.id,
+			names: [
+				{
+					en: entry.en,
+				},
+				{
+					de: entry.de,
+				},
+				{
+					es: entry.es,
+				},
+				{
+					fr: entry.fr,
+				},
+				{
+					it: entry.it,
+				},
+				{
+					"ja-hrkt": entry.ja_hrkt,
+				},
+				{
+					"zh-hans": entry.zh_hans,
+				},
+			],
+		};
+	});
+
+	return normalisedDb;
+};
 
 async function getFileSha(owner, repo, path) {
 	const { data } = await octokit.repos.getContent({

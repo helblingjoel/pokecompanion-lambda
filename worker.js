@@ -23,11 +23,16 @@ export async function handler(event, context) {
 		return parsedBody.pokemonEntry;
 	}).filter((a) => a);
 
-	if (!pokemonIds) {
+	const moveIds = event.Records.map((message) => {
+		const parsedBody = JSON.parse(message.body);
+		return parsedBody.moveEntry;
+	});
+
+	if (!pokemonIds && !moveIds) {
 		return;
 	}
 
-	await Promise.all([processPokemon(pb, pokemonIds)]);
+	await Promise.all([processPokemon(pb, pokemonIds), processMove(pb, moveIds)]);
 }
 
 async function processPokemon(pb, ids) {
@@ -185,6 +190,157 @@ async function processPokemon(pb, ids) {
 	} else {
 		console.error(
 			`Pokemon - ${failedCreations} entries have not been created. Error messages:`
+		);
+		console.error(JSON.stringify(failedCreationErrorMessages));
+	}
+}
+
+async function processMove(pb, ids) {
+	console.log(`Processing Moves - ${JSON.stringify(ids)}`);
+	const moveApiResponses = await Promise.all(
+		ids.map((id) => {
+			return fetch(`https://pokeapi.co/api/v2/move/${id}`, {
+				headers: { "Accept-Encoding": "gzip,deflate,compress" },
+			});
+		})
+	).catch((err) => {
+		console.log(`Error(s) occurred while fetching Move API responses: ${err}`);
+	});
+	console.log(`Move - Received API Responses`);
+
+	const moveBodies = await Promise.all(
+		moveApiResponses.map((response) => {
+			return response.json();
+		})
+	).catch((err) => {
+		console.log(`Error(s) occurred while parsing Move API responses: ${err}`);
+	});
+
+	console.log(`Move - Parsed API Responses`);
+
+	const pbData = moveBodies.map((body) => {
+		const id = body.id;
+
+		return {
+			id,
+			en: body.names.find((entry) => {
+				return entry.language.name === "en";
+			})?.name,
+			de: body.names.find((entry) => {
+				return entry.language.name === "de";
+			})?.name,
+			es: body.names.find((entry) => {
+				return entry.language.name === "es";
+			})?.name,
+			it: body.names.find((entry) => {
+				return entry.language.name === "it";
+			})?.name,
+			fr: body.names.find((entry) => {
+				return entry.language.name === "fr";
+			})?.name,
+			ja_hrkt: body.names.find((entry) => {
+				return entry.language.name === "ja-Hrkt";
+			})?.name,
+			zh_hans: body.names.find((entry) => {
+				return entry.language.name === "zh-Hant";
+			})?.name,
+		};
+	});
+
+	// Non-existing entries will reject
+	const allExistingEntries = await Promise.allSettled(
+		pbData.map((entry) => {
+			return pb.collection("moves").getFirstListItem(`id=${entry.id}`);
+		})
+	);
+
+	const existingEntries = allExistingEntries
+		.filter((entry) => {
+			return entry.status === "fulfilled";
+		})
+		.map((entry) => {
+			return entry.value;
+		});
+	console.log(
+		`Move - Found ${existingEntries.length} entries that will be updated`
+	);
+
+	// Find all entries that already exist and need to be updated
+	const updateEntries = pbData.filter((a) => {
+		return existingEntries.some((b) => {
+			return a.id === b.id;
+		});
+	});
+
+	// Find all entries that are new
+	const newEntries = pbData.filter((a) => {
+		return existingEntries.every((b) => {
+			return a.id !== b.id;
+		});
+	});
+
+	console.log(
+		`Moves - Found ${newEntries.length} new entries that will be created`
+	);
+
+	// Update all existing entries
+	const updatedResults = await Promise.allSettled(
+		updateEntries.map((entry) => {
+			const existingEntry = existingEntries.find((a) => {
+				return a.id === b.id;
+			});
+			return pb.collection("moves").update(existingEntry.id, entry);
+		})
+	).catch((err) => {
+		console.error(
+			`Move - Error when trying to update existing entries: ${err}`
+		);
+	});
+
+	let successfulUpdates = 0;
+	let failedUpdates = 0;
+	const failedErrorMessages = [];
+	updatedResults.forEach((entry) => {
+		if (entry.status === "fulfilled") {
+			successfulUpdates++;
+		} else {
+			failedUpdates++;
+			failedErrorMessages.push(entry);
+		}
+	});
+
+	if (failedUpdates === 0) {
+		console.log(`Move - No errors when updating existing entries`);
+	} else {
+		console.error(
+			`Move - ${failedUpdates} entries have failed to update. Error messages:`
+		);
+		console.error(JSON.stringify(failedErrorMessages));
+	}
+
+	const createdResults = await Promise.allSettled(
+		newEntries.map((entry) => {
+			return pb.collection("moves").create(entry);
+		})
+	);
+
+	let successfulCreations = 0;
+	let failedCreations = 0;
+	const failedCreationErrorMessages = [];
+	createdResults.forEach((entry) => {
+		if (entry.status === "fulfilled") {
+			successfulCreations++;
+		} else {
+			failedCreations++;
+			failedCreationErrorMessages.push(entry);
+		}
+	});
+
+	if (failedCreations === 0) {
+		console.log(`Move - No errors when creating new entries`);
+	} else {
+		console.error(
+			`Move - ${failedCreations} entries have not been created. Error messages:`
 		);
 		console.error(JSON.stringify(failedCreationErrorMessages));
 	}

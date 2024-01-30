@@ -21,14 +21,23 @@ export async function handler(event, context) {
 		return;
 	}
 
-	const { lastMonDbEntry, lastMonAPIEntry } = await findLastPokemon(pb);
+	const {
+		lastMonDbEntry,
+		lastMonDbExtraEntry,
+		lastMonAPIEntry,
+		lastAPIMonExtraEntry,
+	} = await findLastPokemon(pb);
 	const { lastMoveDbEntry, lastMoveAPIEntry } = await findLastMove(pb);
 
 	console.log(
-		`Pokemon - PB Entry ${lastMonDbEntry} | API Entry ${lastMonAPIEntry}`
+		`Pokemon       - PB Entry ${lastMonDbEntry} | API Entry ${lastMonAPIEntry}`
+	);
+
+	console.log(
+		`Pokemon Extra - PB Entry ${lastMonDbExtraEntry} | API Entry ${lastAPIMonExtraEntry}`
 	);
 	console.log(
-		`Move    - PB Entry ${lastMoveDbEntry} | API Entry ${lastMoveAPIEntry}`
+		`Move          - PB Entry ${lastMoveDbEntry} | API Entry ${lastMoveAPIEntry}`
 	);
 
 	const allQueueMessages = [];
@@ -40,6 +49,14 @@ export async function handler(event, context) {
 		allQueueMessages.push(
 			sendSQSMessage(client, {
 				pokemonEntry: i + 1,
+			})
+		);
+	}
+
+	for (let i = lastMonDbEntry; i < lastAPIMonExtraEntry; i++) {
+		allQueueMessages.push(
+			sendSQSMessage(client, {
+				pokemonExtra: i + 1,
 			})
 		);
 	}
@@ -60,8 +77,8 @@ async function findLastPokemon(pb) {
 	console.log("Getting last PB Pokemon entry");
 	const lastDBMonEntry = await pb.collection("pokemon_names").getFullList({
 		sort: "-national_dex",
+		filter: "national_dex < 10001",
 	});
-	console.log(`Last PB Pokemon Entry is ${lastDBMonEntry}`);
 
 	console.log(`Getting last Pokemon API entry`);
 	const lastApiMonEntry = await fetch(
@@ -72,11 +89,52 @@ async function findLastPokemon(pb) {
 		`Last Pokemon API Entry is ${JSON.stringify(apiResponseBody.count)}`
 	);
 
+	const lastDBMonExtraEntry = await pb.collection("pokemon_names").getFullList({
+		sort: "-national_dex",
+		filter: "national_dex > 10000",
+	});
+
+	const lastAPIMonExtraEntry = await findLastAPIExtraMon(
+		lastDBMonExtraEntry.length !== 0
+			? lastDBMonExtraEntry[0].national_dex
+			: 10001
+	);
+
 	return {
 		lastMonDbEntry:
 			lastDBMonEntry.length !== 0 ? lastDBMonEntry[0].national_dex : 0,
+		lastMonDbExtraEntry:
+			lastDBMonExtraEntry.length !== 0
+				? lastDBMonExtraEntry[0].national_dex
+				: 10000,
 		lastMonAPIEntry: apiResponseBody.count,
+		lastAPIMonExtraEntry,
 	};
+}
+
+async function findLastAPIExtraMon(initialId) {
+	let lastId = initialId;
+	let previousResponse = 200;
+
+	while (previousResponse === 200) {
+		console.log(`Request to https://pokeapi.co/api/v2/pokemon/${lastId}`);
+		try {
+			const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${lastId}`);
+			if (!res.ok) {
+				console.log(res.status);
+				previousResponse = res.status;
+				break;
+			}
+			await res.json();
+			lastId += 1;
+		} catch (error) {
+			console.log(error);
+			previousResponse = 500;
+			break;
+		}
+	}
+
+	return lastId;
 }
 
 async function findLastMove(pb) {
@@ -84,7 +142,11 @@ async function findLastMove(pb) {
 	const lastDBMoveEntry = await pb.collection("moves").getFullList({
 		sort: "-id",
 	});
-	console.log(`Last PB Move Entry is ${lastDBMoveEntry}`);
+	console.log(
+		`Last PB Move Entry is ${
+			lastDBMoveEntry.length !== 0 ? lastDBMoveEntry[0].move_id : 0
+		}`
+	);
 
 	console.log(`Getting last Move API entry`);
 	const lastApiMoveEntry = await fetch("https://pokeapi.co/api/v2/move");
@@ -94,13 +156,15 @@ async function findLastMove(pb) {
 	);
 
 	return {
-		lastMoveDbEntry: lastDBMoveEntry.length !== 0 ? lastDBMoveEntry[0].id : 0,
+		lastMoveDbEntry:
+			lastDBMoveEntry.length !== 0 ? lastDBMoveEntry[0].move_id : 0,
 		lastMoveAPIEntry: apiResponseBody.count,
 	};
 }
 
 async function sendSQSMessage(client, message) {
 	try {
+		console.log("Adding", message, "to SQS");
 		const command = new SendMessageCommand({
 			QueueUrl: process.env.QUEUE_URL,
 			MessageBody: JSON.stringify(message),

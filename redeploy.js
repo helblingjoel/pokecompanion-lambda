@@ -66,6 +66,7 @@ const pokemonDbToJson = async (pb) => {
 		return {
 			id: entry.national_dex,
 			generation: entry.generation,
+			redirect: entry.redirect,
 			names: [
 				{
 					en: entry.en,

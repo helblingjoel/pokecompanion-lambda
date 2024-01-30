@@ -53,7 +53,7 @@ export async function handler(event, context) {
 		);
 	}
 
-	for (let i = lastMonDbEntry; i < lastAPIMonExtraEntry; i++) {
+	for (let i = lastMonDbExtraEntry; i < lastAPIMonExtraEntry; i++) {
 		allQueueMessages.push(
 			sendSQSMessage(client, {
 				pokemonExtra: i + 1,

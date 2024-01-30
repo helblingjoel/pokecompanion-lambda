@@ -164,7 +164,6 @@ async function findLastMove(pb) {
 
 async function sendSQSMessage(client, message) {
 	try {
-		console.log("Adding", message, "to SQS");
 		const command = new SendMessageCommand({
 			QueueUrl: process.env.QUEUE_URL,
 			MessageBody: JSON.stringify(message),

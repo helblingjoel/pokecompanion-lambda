@@ -26,7 +26,9 @@ export async function handler(event, context) {
 	const extraPokemonIds = event.Records.map((message) => {
 		const parsedBody = JSON.parse(message.body);
 		return parsedBody.pokemonExtra;
-	}).filter((a) => a);
+	})
+		.filter((a) => a)
+		.filter((a) => a > 10000);
 
 	const moveIds = event.Records.map((message) => {
 		const parsedBody = JSON.parse(message.body);

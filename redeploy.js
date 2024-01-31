@@ -9,6 +9,15 @@ const moveFileName = "/moves.json";
 const octokit = new Octokit({ auth: process.env.GITHUB_PAT });
 
 export async function handler(event, context) {
+	try {
+		await main();
+	} catch (err) {
+		console.log(err);
+	}
+	return;
+}
+
+const main = async () => {
 	if (
 		!checkEnvVars([
 			"POCKETBASE_URL",
@@ -49,7 +58,7 @@ export async function handler(event, context) {
 	} catch (err) {
 		console.error(`Moves - Error ${err}`);
 	}
-}
+};
 
 const getExistingFile = async (filename) => {
 	const gitPokemonRequest = await fetch(

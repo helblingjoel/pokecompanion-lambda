@@ -39,11 +39,16 @@ export async function handler(event, context) {
 		return;
 	}
 
-	await Promise.all([
-		processPokemon(pb, pokemonIds),
-		processMove(pb, moveIds),
-		processExtraPokemon(pb, extraPokemonIds),
-	]);
+	try {
+		await Promise.all([
+			processPokemon(pb, pokemonIds),
+			processMove(pb, moveIds),
+			processExtraPokemon(pb, extraPokemonIds),
+		]);
+	} catch (err) {
+		console.log(err);
+	}
+	return;
 }
 
 async function processPokemon(pb, ids) {

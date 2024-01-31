@@ -3,6 +3,15 @@ import { checkEnvVars } from "./utils.js";
 import { getAuthedPb } from "./pocketbase.js";
 
 export async function handler(event, context) {
+	try {
+		await main();
+	} catch (err) {
+		console.log(err);
+	}
+	return;
+}
+
+const main = async () => {
 	if (
 		!checkEnvVars([
 			"POCKETBASE_URL",
@@ -71,7 +80,7 @@ export async function handler(event, context) {
 	await Promise.all(allQueueMessages);
 
 	// Should expand this to cover missing name entries as well
-}
+};
 
 async function findLastPokemon(pb) {
 	console.log("Getting last PB Pokemon entry");

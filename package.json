@@ -12,6 +12,7 @@
 	"dependencies": {
 		"@aws-sdk/client-sqs": "^3.485.0",
 		"@octokit/rest": "^20.0.2",
+		"dotenv": "^16.4.1",
 		"pocketbase": "^0.20.1"
 	},
 	"devDependencies": {

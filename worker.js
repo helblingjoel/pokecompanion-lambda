@@ -2,6 +2,15 @@ import { checkEnvVars } from "./utils.js";
 import { getAuthedPb } from "./pocketbase.js";
 
 export async function handler(event, context) {
+	try {
+		await main(event);
+	} catch (err) {
+		console.log(err);
+	}
+	return;
+}
+
+const main = async (event) => {
 	if (!checkEnvVars(["POCKETBASE_URL", "ADMIN_EMAIL", "ADMIN_PASSWORD"])) {
 		console.error("Missing env variable");
 		return;
@@ -15,8 +24,6 @@ export async function handler(event, context) {
 	// There'll be multiple requests in-flight at the same time - don't cancel any
 	// https://github.com/pocketbase/js-sdk#auto-cancellation
 	pb.autoCancellation(false);
-
-	console.log(event.Records);
 
 	const pokemonIds = event.Records.map((message) => {
 		const parsedBody = JSON.parse(message.body);
@@ -49,7 +56,7 @@ export async function handler(event, context) {
 		console.log(err);
 	}
 	return;
-}
+};
 
 async function processPokemon(pb, ids) {
 	if (ids.length === 0) {
@@ -262,6 +269,10 @@ async function processExtraPokemon(pb, ids) {
 	console.log(`Extra Pokemon - Parsed API responses`);
 
 	const pbData = pokemonFormResponses.map((body) => {
+		const pokemon = pokemonBodies.find((a) => {
+			return a.id === Number(body.pokemon.url.split("/")[6]);
+		});
+
 		return {
 			national_dex: body.id,
 			en: body.names.find((entry) => {
@@ -286,7 +297,11 @@ async function processExtraPokemon(pb, ids) {
 				return entry.language.name === "zh-Hant";
 			})?.name,
 			generation: getPokemonGeneration(body.id),
-			redirect: `${body.species.url.split("/")[6]}?variety=${body.name}`,
+			redirect: `${
+				body.pokemon.species
+					? body.pokemon.species.url.split("/")[6]
+					: pokemon.species.url.split("/")[6]
+			}?variety=${body.name}`,
 		};
 	});
 
@@ -568,37 +583,20 @@ const getPokemonGeneration = (id) => {
 	}
 };
 
+// const testPayload = [
+// { body: `{"pokemonExtra":10277}` }
+// ];
+
+// Pokemon
+// for(let i = 1; i < 1025; i++){
+// 	testPayload.push(`{"pokemon":${i}}`)
+// }
+
+// Extra Pokemon
+// for (let i = 10000; i < 10277; i++) {
+// 	testPayload.push({ body: `{"pokemonExtra":${i}}` });
+// }
+
 // handler({
-// 	Records: [
-// 		// {
-// 		// 	messageId: "e4e03a6a-5800-48bf-813b-6a28f0edf85f",
-// 		// 	receiptHandle:
-// 		// 		"AQEByYDXI78U5Iz7vQDs0ucr1IaB0yVly0XmOuqnYI9ph7vCAm1eFD/SJCVvHQTK3zPr3boesYOUwD3H+ZRMDcHNkJFYb2BHK4vxY1f5fFlBT3NKWy2ZzDBGEAyFx+oIXpKXTln1/90xLOZa8k3akXUcOSz19T1bCyXr11fWcEdj3C2jyOdOKFK2Z8SmKLa42eSDD0cz0eIqG00gON49xUc2jTV6Ziujs95f2XS3F4AmNUh2dtJLN/J6dDIGerwq6iRy16+OD5Gqg6bczynaaXT+Yh8TVTPiJPAgRTUbXe6wtBU0ebgZ70ugc5Juwt/qV5vWBymGQkjsdOtuHCcCyhdT96bCtu40/TEbfSCKrMyDoJZwTLiqQGrlJu5rFTKzEC1Y2m0Opp6fNsqxCfIdw3b9lqiSA2W1D38dH6D8AxbPSdk=",
-// 		// 	body: '{"pokemonEntry":1}',
-// 		// 	attributes: {
-// 		// 		ApproximateReceiveCount: "1",
-// 		// 		SentTimestamp: "1704032911576",
-// 		// 		SenderId: "250472156906",
-// 		// 		ApproximateFirstReceiveTimestamp: "1704033006119",
-// 		// 	},
-// 		// 	messageAttributes: {},
-// 		// 	md5OfBody: "d4ae1e457e67bf81562f12d5f2ea2f50",
-// 		// 	eventSource: "aws:sqs",
-// 		// 	eventSourceARN:
-// 		// 		"arn:aws:sqs:eu-west-2:250472156906:pokecompanion-pocketbase",
-// 		// 	awsRegion: "eu-west-2",
-// 		// },
-// 		{
-// 			body: '{"pokemonExtra":10001}',
-// 		},
-// 		{
-// 			body: '{"pokemonExtra":10002}',
-// 		},
-// 		{
-// 			body: '{"pokemonExtra":10003}',
-// 		},
-// 		{
-// 			body: '{"pokemonExtra":10004}',
-// 		},
-// 	],
+// 	Records: testPayload,
 // });

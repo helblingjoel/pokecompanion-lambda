@@ -2,6 +2,15 @@ import { checkEnvVars } from "./utils.js";
 import { getAuthedPb } from "./pocketbase.js";
 
 export async function handler(event, context) {
+	try {
+		await main(event);
+	} catch (err) {
+		console.log(err);
+	}
+	return;
+}
+
+const main = async (event) => {
 	if (!checkEnvVars(["POCKETBASE_URL", "ADMIN_EMAIL", "ADMIN_PASSWORD"])) {
 		console.error("Missing env variable");
 		return;
@@ -16,26 +25,44 @@ export async function handler(event, context) {
 	// https://github.com/pocketbase/js-sdk#auto-cancellation
 	pb.autoCancellation(false);
 
-	console.log(event.Records);
-
 	const pokemonIds = event.Records.map((message) => {
 		const parsedBody = JSON.parse(message.body);
 		return parsedBody.pokemonEntry;
 	}).filter((a) => a);
 
+	const extraPokemonIds = event.Records.map((message) => {
+		const parsedBody = JSON.parse(message.body);
+		return parsedBody.pokemonExtra;
+	})
+		.filter((a) => a)
+		.filter((a) => a > 10000);
+
 	const moveIds = event.Records.map((message) => {
 		const parsedBody = JSON.parse(message.body);
 		return parsedBody.moveEntry;
-	});
+	}).filter((a) => a);
 
-	if (!pokemonIds && !moveIds) {
+	if (!pokemonIds && !moveIds && !extraPokemonIds) {
 		return;
 	}
 
-	await Promise.all([processPokemon(pb, pokemonIds), processMove(pb, moveIds)]);
-}
+	try {
+		await Promise.all([
+			processPokemon(pb, pokemonIds),
+			processMove(pb, moveIds),
+			processExtraPokemon(pb, extraPokemonIds),
+		]);
+	} catch (err) {
+		console.log(err);
+	}
+	return;
+};
 
 async function processPokemon(pb, ids) {
+	if (ids.length === 0) {
+		console.log(`Skipping Pokemon`);
+		return;
+	}
 	console.log(`Processing Pokemon - ${JSON.stringify(ids)}`);
 	const pokemonApiResponses = await Promise.all(
 		ids.map((id) => {
@@ -195,7 +222,195 @@ async function processPokemon(pb, ids) {
 	}
 }
 
+async function processExtraPokemon(pb, ids) {
+	if (ids.length === 0) {
+		console.log(`Skipping Extra Pokemon`);
+		return;
+	}
+	console.log(`Processing Extra Pokemon - ${JSON.stringify(ids)}`);
+	const pokemonApiResponses = await Promise.all(
+		ids.map((id) => {
+			return fetch(`https://pokeapi.co/api/v2/pokemon/${id}`, {
+				headers: { "Accept-Encoding": "gzip,deflate,compress" },
+			});
+		})
+	).catch((err) => {
+		console.log(
+			`Error(s) occurred while fetching Extra Pokemon API responses: ${err}`
+		);
+	});
+	console.log(`Extra Pokemon - Received API Responses`);
+
+	const pokemonBodies = await Promise.all(
+		pokemonApiResponses.map((response) => {
+			return response.json();
+		})
+	).catch((err) => {
+		console.log(
+			`Error(s) occurred while parsing Extra Pokemon API responses: ${err}`
+		);
+	});
+
+	const pokemonFormResponses = await Promise.all(
+		pokemonBodies.map(async (body) => {
+			const defaultForm = body.forms[0].url;
+			return fetch(defaultForm, {
+				headers: { "Accept-Encoding": "gzip,deflate,compress" },
+			}).then((res) => {
+				return res.json();
+			});
+		})
+	).catch((err) => {
+		console.log(
+			`Error(s) occurred while fetching Extra Pokemon Form API responses: ${err}`
+		);
+	});
+
+	console.log(`Extra Pokemon - Parsed API responses`);
+
+	const pbData = pokemonFormResponses.map((body) => {
+		const pokemon = pokemonBodies.find((a) => {
+			return a.id === Number(body.pokemon.url.split("/")[6]);
+		});
+
+		return {
+			national_dex: body.id,
+			en: body.names.find((entry) => {
+				return entry.language.name === "en";
+			})?.name,
+			de: body.names.find((entry) => {
+				return entry.language.name === "de";
+			})?.name,
+			es: body.names.find((entry) => {
+				return entry.language.name === "es";
+			})?.name,
+			it: body.names.find((entry) => {
+				return entry.language.name === "it";
+			})?.name,
+			fr: body.names.find((entry) => {
+				return entry.language.name === "fr";
+			})?.name,
+			ja_hrkt: body.names.find((entry) => {
+				return entry.language.name === "ja-Hrkt";
+			})?.name,
+			zh_hans: body.names.find((entry) => {
+				return entry.language.name === "zh-Hant";
+			})?.name,
+			generation: getPokemonGeneration(body.id),
+			redirect: `${
+				body.pokemon.species
+					? body.pokemon.species.url.split("/")[6]
+					: pokemon.species.url.split("/")[6]
+			}?variety=${body.name}`,
+		};
+	});
+
+	// Non-existing entries will reject
+	const allExistingEntries = await Promise.allSettled(
+		pbData.map((entry) => {
+			return pb
+				.collection("pokemon_names")
+				.getFirstListItem(`national_dex=${entry.national_dex}`);
+		})
+	);
+	const existingEntries = allExistingEntries
+		.filter((entry) => {
+			return entry.status === "fulfilled";
+		})
+		.map((entry) => {
+			return entry.value;
+		});
+	console.log(
+		`Extra Pokemon - Found ${existingEntries.length} entries that will be updated`
+	);
+
+	// Find all entries that already exist and need to be updated
+	const updateEntries = pbData.filter((a) => {
+		return existingEntries.some((b) => {
+			return a.national_dex === b.national_dex;
+		});
+	});
+
+	// Find all entries that are new
+	const newEntries = pbData.filter((a) => {
+		return existingEntries.every((b) => {
+			return a.national_dex !== b.national_dex;
+		});
+	});
+
+	console.log(
+		`Extra Pokemon - Found ${newEntries.length} new entries that will be created`
+	);
+
+	// Update all existing entries
+	const updatedResults = await Promise.allSettled(
+		updateEntries.map((entry) => {
+			const existingEntry = existingEntries.find((a) => {
+				return a.national_dex === entry.national_dex;
+			});
+			return pb.collection("pokemon_names").update(existingEntry.id, entry);
+		})
+	).catch((err) => {
+		console.error(
+			`Extra Pokemon - Error when trying to update existing entries: ${err}`
+		);
+	});
+
+	let successfulUpdates = 0;
+	let failedUpdates = 0;
+	const failedErrorMessages = [];
+	updatedResults.forEach((entry) => {
+		if (entry.status === "fulfilled") {
+			successfulUpdates++;
+		} else {
+			failedUpdates++;
+			failedErrorMessages.push(entry);
+		}
+	});
+
+	if (failedUpdates === 0) {
+		console.log(`Extra Pokemon - No errors when updating existing entries`);
+	} else {
+		console.error(
+			`Extra Pokemon - ${failedUpdates} entries have failed to update. Error messages:`
+		);
+		console.error(JSON.stringify(failedErrorMessages));
+	}
+
+	// Create all existing entries
+	const createdResults = await Promise.allSettled(
+		newEntries.map((entry) => {
+			return pb.collection("pokemon_names").create(entry);
+		})
+	);
+
+	let successfulCreations = 0;
+	let failedCreations = 0;
+	const failedCreationErrorMessages = [];
+	createdResults.forEach((entry) => {
+		if (entry.status === "fulfilled") {
+			successfulCreations++;
+		} else {
+			failedCreations++;
+			failedCreationErrorMessages.push(entry);
+		}
+	});
+
+	if (failedCreations === 0) {
+		console.log(`Extra Pokemon - No errors when creating new entries`);
+	} else {
+		console.error(
+			`Extra Pokemon - ${failedCreations} entries have not been created. Error messages:`
+		);
+		console.error(JSON.stringify(failedCreationErrorMessages));
+	}
+}
+
 async function processMove(pb, ids) {
+	if (ids.length === 0) {
+		console.log("Skipping Moves");
+		return;
+	}
 	console.log(`Processing Moves - ${JSON.stringify(ids)}`);
 	const moveApiResponses = await Promise.all(
 		ids.map((id) => {
@@ -345,7 +560,9 @@ async function processMove(pb, ids) {
 }
 
 const getPokemonGeneration = (id) => {
-	if (id <= 151) {
+	if (id > 10000) {
+		return -1;
+	} else if (id <= 151) {
 		return 1;
 	} else if (id > 151 && id <= 252) {
 		return 2;
@@ -366,43 +583,20 @@ const getPokemonGeneration = (id) => {
 	}
 };
 
+// const testPayload = [
+// { body: `{"pokemonExtra":10277}` }
+// ];
+
+// Pokemon
+// for(let i = 1; i < 1025; i++){
+// 	testPayload.push(`{"pokemon":${i}}`)
+// }
+
+// Extra Pokemon
+// for (let i = 10000; i < 10277; i++) {
+// 	testPayload.push({ body: `{"pokemonExtra":${i}}` });
+// }
+
 // handler({
-// 	Records: [
-// 		{
-// 			messageId: "e4e03a6a-5800-48bf-813b-6a28f0edf85f",
-// 			receiptHandle:
-// 				"AQEByYDXI78U5Iz7vQDs0ucr1IaB0yVly0XmOuqnYI9ph7vCAm1eFD/SJCVvHQTK3zPr3boesYOUwD3H+ZRMDcHNkJFYb2BHK4vxY1f5fFlBT3NKWy2ZzDBGEAyFx+oIXpKXTln1/90xLOZa8k3akXUcOSz19T1bCyXr11fWcEdj3C2jyOdOKFK2Z8SmKLa42eSDD0cz0eIqG00gON49xUc2jTV6Ziujs95f2XS3F4AmNUh2dtJLN/J6dDIGerwq6iRy16+OD5Gqg6bczynaaXT+Yh8TVTPiJPAgRTUbXe6wtBU0ebgZ70ugc5Juwt/qV5vWBymGQkjsdOtuHCcCyhdT96bCtu40/TEbfSCKrMyDoJZwTLiqQGrlJu5rFTKzEC1Y2m0Opp6fNsqxCfIdw3b9lqiSA2W1D38dH6D8AxbPSdk=",
-// 			body: '{"pokemonEntry":85}',
-// 			attributes: {
-// 				ApproximateReceiveCount: "1",
-// 				SentTimestamp: "1704032911576",
-// 				SenderId: "250472156906",
-// 				ApproximateFirstReceiveTimestamp: "1704033006119",
-// 			},
-// 			messageAttributes: {},
-// 			md5OfBody: "d4ae1e457e67bf81562f12d5f2ea2f50",
-// 			eventSource: "aws:sqs",
-// 			eventSourceARN:
-// 				"arn:aws:sqs:eu-west-2:250472156906:pokecompanion-pocketbase",
-// 			awsRegion: "eu-west-2",
-// 		},
-// 		{
-// 			messageId: "2dc6b36c-e3bf-4c20-85bb-6712cd5214a4",
-// 			receiptHandle:
-// 				"AQEBQzFTP6LlfZKA8GA4sD3SbAGHTZ+lS45uFZ0s00oq6lDhiGfM3HS2Xv/P0Bpd7rCcTJC/8QMqFwWbOxEQXQcwN9hFajZl831BRIpBCkTxS+e6pcIoq5XU95X+VHSUvdoZXbLqnRp7edzpxntPWizkzty/CZ8wr9d0LhnOlbBwIKqKS4Lvw9ua+tJU9vl+6iaXv+OckcXfLKzPAET2SxsglgBXuVcNUpvhHuKhy1wqGENVb3Depzv/X+3eRjscwze+VgxFZ3npQa5rRllfrUsaw1OFAznQRLofmIPs451oUbMFneUzJkD5x+dgRISScDTHuHVO4ncrIYeXpXT+bxyNe0jXqkmYJssKYE3OKDxOv8yoKSvlD2L8dcZf8M7vzDrugfiaion817PPXL1VKz9oZHYlu7U0+wt/TPVUz9ma18A=",
-// 			body: '{"pokemonEntry":89}',
-// 			attributes: {
-// 				ApproximateReceiveCount: "1",
-// 				SentTimestamp: "1704032911581",
-// 				SenderId: "250472156906",
-// 				ApproximateFirstReceiveTimestamp: "1704033006119",
-// 			},
-// 			messageAttributes: {},
-// 			md5OfBody: "a72e05b7022c3bd439bb6d23ff65ac35",
-// 			eventSource: "aws:sqs",
-// 			eventSourceARN:
-// 				"arn:aws:sqs:eu-west-2:250472156906:pokecompanion-pocketbase",
-// 			awsRegion: "eu-west-2",
-// 		},
-// 	],
+// 	Records: testPayload,
 // });

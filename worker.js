@@ -274,7 +274,7 @@ async function processExtraPokemon(pb, ids) {
 		});
 
 		return {
-			national_dex: body.id,
+			national_dex: pokemon.id,
 			en: body.names.find((entry) => {
 				return entry.language.name === "en";
 			})?.name,
@@ -583,16 +583,14 @@ const getPokemonGeneration = (id) => {
 	}
 };
 
-// const testPayload = [
-// { body: `{"pokemonExtra":10277}` }
-// ];
+// const testPayload = [{ body: `{"pokemonExtra":10166}` }];
 
 // Pokemon
 // for(let i = 1; i < 1025; i++){
 // 	testPayload.push(`{"pokemon":${i}}`)
 // }
 
-// Extra Pokemon
+// // Extra Pokemon
 // for (let i = 10000; i < 10277; i++) {
 // 	testPayload.push({ body: `{"pokemonExtra":${i}}` });
 // }

@@ -5,6 +5,7 @@ import { getAuthedPb } from "./pocketbase.js";
 const folderLocation = "/src/lib/data";
 const pokemonFileName = "/pokemonNames.json";
 const moveFileName = "/moves.json";
+const branchName = "main";
 
 const octokit = new Octokit({ auth: process.env.GITHUB_PAT });
 
@@ -179,7 +180,7 @@ async function updatePokemonGithub(pb) {
 			.join("\n")}`,
 		content: content,
 		sha,
-		branch: "main",
+		branch: branchName,
 	});
 
 	return differences;
@@ -225,7 +226,7 @@ async function updateMoveGithub(pb) {
 			.join("\n")}`,
 		content: content,
 		sha,
-		branch: "main",
+		branch: branchName,
 	});
 
 	return differences;
@@ -273,6 +274,7 @@ async function getFileSha(owner, repo, path) {
 		owner: owner,
 		repo: repo,
 		path: path,
+		ref: branchName,
 	});
 
 	return data.sha;

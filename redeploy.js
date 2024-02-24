@@ -61,10 +61,20 @@ const main = async () => {
 };
 
 const getExistingFile = async (filename) => {
-	const gitPokemonRequest = await fetch(
-		`https://raw.githubusercontent.com/helblingjoel/pokecompanion/main${folderLocation}${filename}`
-	);
-	return await gitPokemonRequest.json();
+	try {
+		const gitPokemonRequest = await fetch(
+			`https://raw.githubusercontent.com/helblingjoel/pokecompanion/${branchName}${folderLocation}${filename}`
+		);
+		if (!gitPokemonRequest.ok) {
+			throw new Error(
+				`Response had non-200 status code: ${gitPokemonRequest.status}`
+			);
+		}
+		return await gitPokemonRequest.json();
+	} catch (err) {
+		console.log(`Failed to fetch existing file - Error: ${err}`);
+		return [];
+	}
 };
 
 const pokemonDbToJson = async (pb) => {

@@ -4,7 +4,7 @@ dotenv.config();
 export function checkEnvVars(vars) {
 	vars.forEach((envVar) => {
 		if (!process.env[envVar]) {
-			console.error(`No ${process.env[envVar]} specified`);
+			console.error(`No ${envVar} specified`);
 			return false;
 		}
 	});

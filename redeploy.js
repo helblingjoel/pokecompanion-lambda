@@ -112,7 +112,6 @@ const pokemonDbToJson = async (pb) => {
 			],
 		};
 	});
-
 	return normalisedDb;
 };
 
@@ -146,11 +145,17 @@ async function updatePokemonGithub(pb) {
 	]);
 
 	const sortedDb = pokemonDb.sort((a, b) => {
-		return a.id > b.id ? 1 : -1;
+		const aId = a.redirect ? Number(a.redirect.split("/")[0]) : a.id;
+		const bId = b.redirect ? Number(b.redirect.split("/")[0]) : b.id;
+
+		return aId < bId ? 1 : -1;
 	});
 
 	const sortedGit = pokemonGithub.sort((a, b) => {
-		return a.id > b.id ? 1 : -1;
+		const aId = a.redirect ? Number(a.redirect.split("/")[0]) : a.id;
+		const bId = b.redirect ? Number(b.redirect.split("/")[0]) : b.id;
+
+		return aId < bId ? 1 : -1;
 	});
 
 	const differences = findDifferences(sortedDb, sortedGit);

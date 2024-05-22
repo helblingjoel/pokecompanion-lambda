@@ -17,8 +17,9 @@
 	},
 	"devDependencies": {
 		"@semantic-release/changelog": "^6.0.3",
-		"@semantic-release/github": "^10.0.5",
-		"semantic-release": "^23.1.1"
+		"@semantic-release/github": "^9.2.6",
+		"semantic-release": "^22.0.12",
+		"serverless-newrelic-lambda-layers": "^5.1.0"
 	},
 	"repository": {
 		"type": "git",

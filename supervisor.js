@@ -1,14 +1,18 @@
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { checkEnvVars } from "./utils.js";
 import { getAuthedPb } from "./pocketbase.js";
+import newrelic from 'newrelic'
 
 export async function handler(event, context) {
-	try {
-		await main();
-	} catch (err) {
-		console.log(err);
-	}
-	return;
+	newrelic.setLambdaHandler(async (event) => {
+		try {
+			await main();
+		} catch (err) {
+			console.log(err);
+		}
+		return;
+  });
+	return newrelic.lambdaHandler()(event, context);
 }
 
 const main = async () => {

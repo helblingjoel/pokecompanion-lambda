@@ -5,6 +5,7 @@ import { getAuthedPb } from "./pocketbase.js";
 const folderLocation = "/src/lib/data";
 const pokemonFileName = "/pokemonNames.json";
 const moveFileName = "/moves.json";
+const branchName = "main";
 
 const octokit = new Octokit({ auth: process.env.GITHUB_PAT });
 
@@ -61,10 +62,20 @@ const main = async () => {
 };
 
 const getExistingFile = async (filename) => {
-	const gitPokemonRequest = await fetch(
-		`https://raw.githubusercontent.com/helblingjoel/pokecompanion/main${folderLocation}${filename}`
-	);
-	return await gitPokemonRequest.json();
+	try {
+		const gitPokemonRequest = await fetch(
+			`https://raw.githubusercontent.com/helblingjoel/pokecompanion/${branchName}${folderLocation}${filename}`
+		);
+		if (!gitPokemonRequest.ok) {
+			throw new Error(
+				`Response had non-200 status code: ${gitPokemonRequest.status}`
+			);
+		}
+		return await gitPokemonRequest.json();
+	} catch (err) {
+		console.log(`Failed to fetch existing file - Error: ${err}`);
+		return [];
+	}
 };
 
 const pokemonDbToJson = async (pb) => {
@@ -101,7 +112,6 @@ const pokemonDbToJson = async (pb) => {
 			],
 		};
 	});
-
 	return normalisedDb;
 };
 
@@ -135,11 +145,17 @@ async function updatePokemonGithub(pb) {
 	]);
 
 	const sortedDb = pokemonDb.sort((a, b) => {
-		return a.id > b.id ? 1 : -1;
+		const aId = a.redirect ? Number(a.redirect.split("/")[0]) : a.id;
+		const bId = b.redirect ? Number(b.redirect.split("/")[0]) : b.id;
+
+		return aId < bId ? 1 : -1;
 	});
 
 	const sortedGit = pokemonGithub.sort((a, b) => {
-		return a.id > b.id ? 1 : -1;
+		const aId = a.redirect ? Number(a.redirect.split("/")[0]) : a.id;
+		const bId = b.redirect ? Number(b.redirect.split("/")[0]) : b.id;
+
+		return aId < bId ? 1 : -1;
 	});
 
 	const differences = findDifferences(sortedDb, sortedGit);
@@ -169,7 +185,7 @@ async function updatePokemonGithub(pb) {
 			.join("\n")}`,
 		content: content,
 		sha,
-		branch: "main",
+		branch: branchName,
 	});
 
 	return differences;
@@ -215,7 +231,7 @@ async function updateMoveGithub(pb) {
 			.join("\n")}`,
 		content: content,
 		sha,
-		branch: "main",
+		branch: branchName,
 	});
 
 	return differences;
@@ -263,6 +279,7 @@ async function getFileSha(owner, repo, path) {
 		owner: owner,
 		repo: repo,
 		path: path,
+		ref: branchName,
 	});
 
 	return data.sha;

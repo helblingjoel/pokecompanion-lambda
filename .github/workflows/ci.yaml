@@ -1,19 +1,13 @@
-name: Release Workflow
+name: CI Workflow
 
 on:
   push:
-    branches:
+    branches-ignore:
       - main
 
 jobs:
-  release:
+  dry-run-release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      packages: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -41,7 +35,7 @@ jobs:
       - name: Create supervisor .zip file
         run: zip -r supervisor.zip supervisor.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
 
-      - name: Run semantic-release
-        run: npx semantic-release
+      - name: Dry-run semantic-release
+        run: npx semantic-release --dry-run
         env:
           GITHUB_TOKEN: ${{ github.token }}

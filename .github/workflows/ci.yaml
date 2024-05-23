@@ -1,0 +1,41 @@
+name: CI Workflow
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Remove sqs sdk
+        run: npm rm @aws-sdk/client-sqs
+
+      - name: Create redeploy .zip file
+        run: zip -r redeploy.zip redeploy.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Create worker .zip file
+        run: zip -r worker.zip worker.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Add sqs sdk
+        run: npm i @aws-sdk/client-sqs
+
+      - name: Create supervisor .zip file
+        run: zip -r supervisor.zip supervisor.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
+
+      - name: Dry-run semantic-release
+        run: npx semantic-release --dry-run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

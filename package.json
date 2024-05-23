@@ -13,6 +13,7 @@
 		"@aws-sdk/client-sqs": "^3.485.0",
 		"@octokit/rest": "^20.0.2",
 		"dotenv": "^16.4.1",
+		"newrelic": "^11.17.0",
 		"pocketbase": "^0.20.1"
 	},
 	"devDependencies": {

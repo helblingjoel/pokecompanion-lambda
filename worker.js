@@ -2,12 +2,15 @@ import { checkEnvVars } from "./utils.js";
 import { getAuthedPb } from "./pocketbase.js";
 
 export async function handler(event, context) {
-	try {
-		await main(event);
-	} catch (err) {
-		console.log(err);
-	}
-	return;
+	newrelic.setLambdaHandler(async (event) => {
+		try {
+			await main(event);
+		} catch (err) {
+			console.log(err);
+		}
+		return;
+	});
+	return newrelic.lambdaHandler()(event, context);
 }
 
 const main = async (event) => {

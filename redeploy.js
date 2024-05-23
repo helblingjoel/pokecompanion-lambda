@@ -10,12 +10,16 @@ const branchName = "main";
 const octokit = new Octokit({ auth: process.env.GITHUB_PAT });
 
 export async function handler(event, context) {
-	try {
-		await main();
-	} catch (err) {
-		console.log(err);
-	}
-	return;
+	newrelic.setLambdaHandler(async (event) => {
+		try {
+			await main();
+		} catch (err) {
+			console.log(err);
+		}
+		return;
+	});
+	
+	return newrelic.lambdaHandler()(event, context);
 }
 
 const main = async () => {

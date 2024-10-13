@@ -41,17 +41,20 @@ jobs:
       - name: Create supervisor .zip file
         run: zip -r supervisor.zip supervisor.js utils.js pocketbase.js LICENSE node_modules/ package.json package-lock.json
 
+      - name: Run semantic-release and capture version
+        id: semantic_release
+        run: |
+          version=$(npx semantic-release --dry-run | grep 'The next release version is' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "release_version=$version" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          
       - name: Run semantic-release
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
       # Sync to S3 so it can be linked to Lambdas
-      - name: Extract version
-        id: extract_version
-        run: echo "RELEASE_VERSION=$(npx semantic-release --dry-run | grep 'The next release version is' | awk '{print $6}')" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Upload redeploy to s3
         uses: ricardoapaes/action-s3-upload@main
@@ -60,7 +63,7 @@ jobs:
           AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         with:
           bucket: helblinglilly-pokecompanion
-          filename: lambdas/releases/${{ env.RELEASE_VERSION }}/redeploy.zip
+          filename: lambdas/releases/${{ env.release_version }}/redeploy.zip
           src: redeploy.zip
           region: eu-west-2
       
@@ -71,7 +74,7 @@ jobs:
           AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         with:
           bucket: helblinglilly-pokecompanion
-          filename: lambdas/releases/${{ env.RELEASE_VERSION }}/supervisor.zip
+          filename: lambdas/releases/${{ env.release_version }}/supervisor.zip
           src: supervisor.zip
           region: eu-west-2
 
@@ -82,6 +85,6 @@ jobs:
           AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         with:
           bucket: helblinglilly-pokecompanion
-          filename: lambdas/releases/${{ env.RELEASE_VERSION }}/worker.zip
+          filename: lambdas/releases/${{ env.release_version }}/worker.zip
           src: worker.zip
           region: eu-west-2

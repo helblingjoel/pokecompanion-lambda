@@ -4,18 +4,27 @@ import { getAuthedPb } from "./pocketbase.js";
 import newrelic from 'newrelic'
 
 export async function handler(event, context) {
-	newrelic.setLambdaHandler(async (event) => {
+	async function mainFunction(){
 		try {
 			await main();
 		} catch (err) {
 			console.log(err);
 		}
 		return;
-  });
-	return newrelic.lambdaHandler()(event, context);
+	}
+
+	if (process.env.NODE_ENV === 'production'){
+		newrelic.setLambdaHandler(async (event) => {
+			mainFunction()
+		});
+	  return newrelic.lambdaHandler()(event, context);
+	} else {
+		mainFunction();
+	}
 }
 
 const main = async () => {
+	console.log('Checking environment variables...')
 	if (
 		!checkEnvVars([
 			"POCKETBASE_URL",
@@ -24,10 +33,10 @@ const main = async () => {
 			"ADMIN_PASSWORD",
 		])
 	) {
-		console.error("Missing env variable");
+		console.error("  ERROR: Missing env variable");
 		return;
 	}
-	console.log("All env vars present");
+	console.log("  OK: All env vars present");
 
 	const pb = await getAuthedPb();
 	if (!pb) {
@@ -42,16 +51,7 @@ const main = async () => {
 	} = await findLastPokemon(pb);
 	const { lastMoveDbEntry, lastMoveAPIEntry } = await findLastMove(pb);
 
-	console.log(
-		`Pokemon       - PB Entry ${lastMonDbEntry} | API Entry ${lastMonAPIEntry}`
-	);
-
-	console.log(
-		`Pokemon Extra - PB Entry ${lastMonDbExtraEntry} | API Entry ${lastAPIMonExtraEntry}`
-	);
-	console.log(
-		`Move          - PB Entry ${lastMoveDbEntry} | API Entry ${lastMoveAPIEntry}`
-	);
+	console.log('\nFinished data fetching')
 
 	const allQueueMessages = [];
 	const client = new SQSClient({
@@ -81,25 +81,27 @@ const main = async () => {
 			})
 		);
 	}
+
 	await Promise.all(allQueueMessages);
 
-	// Should expand this to cover missing name entries as well
+	console.log('=== Done ===')
 };
 
 async function findLastPokemon(pb) {
-	console.log("Getting last PB Pokemon entry");
+	console.log("\nGetting last PB Pokemon entry...");
 	const lastDBMonEntry = await pb.collection("pokemon_names").getFullList({
 		sort: "-national_dex",
 		filter: "national_dex < 10001",
 	});
+	console.log ('  OK: Last entry is', lastDBMonEntry[0]?.national_dex ?? 0)
 
-	console.log(`Getting last Pokemon API entry`);
+	console.log(`\nGetting last Pokemon API entry`);
 	const lastApiMonEntry = await fetch(
 		"https://pokeapi.co/api/v2/pokemon-species"
 	);
 	const apiResponseBody = await lastApiMonEntry.json();
 	console.log(
-		`Last Pokemon API Entry is ${JSON.stringify(apiResponseBody.count)}`
+		`  OK: Last entry is ${Number(apiResponseBody.count)}`
 	);
 
 	const lastDBMonExtraEntry = await pb.collection("pokemon_names").getFullList({
@@ -129,17 +131,20 @@ async function findLastAPIExtraMon(initialId) {
 	let lastId = initialId;
 	let previousResponse = 200;
 
+	console.log('\nGetting last API Extra Pokemon')
 	while (previousResponse === 200) {
-		console.log(`Request to https://pokeapi.co/api/v2/pokemon/${lastId}`);
+		console.log(`  Request to https://pokeapi.co/api/v2/pokemon/${lastId}`);
 		try {
 			const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${lastId}`);
 			if (!res.ok) {
-				console.log(res.status);
+				console.log('    HTTP Status:', res.status);
 				previousResponse = res.status;
-				break;
+				lastId -= 1;
+			} else {
+				console.log('    OK');
+				await res.json();
+				lastId += 1;
 			}
-			await res.json();
-			lastId += 1;
 		} catch (error) {
 			console.log(error);
 			previousResponse = 500;
@@ -151,31 +156,38 @@ async function findLastAPIExtraMon(initialId) {
 }
 
 async function findLastMove(pb) {
-	console.log("Getting last PB move entry");
+	console.log("\nGetting last PB move entry");
 	const lastDBMoveEntry = await pb.collection("moves").getFullList({
-		sort: "-id",
+		sort: "-move_id",
 	});
 	console.log(
-		`Last PB Move Entry is ${
+		`  OK: Last PB Move Entry is ${
 			lastDBMoveEntry.length !== 0 ? lastDBMoveEntry[0].move_id : 0
 		}`
 	);
 
-	console.log(`Getting last Move API entry`);
+	console.log(`\nGetting last Move API entry`);
 	const lastApiMoveEntry = await fetch("https://pokeapi.co/api/v2/move");
 	const apiResponseBody = await lastApiMoveEntry.json();
+
+	// Moves that have an ID > 10000 are Shadow moves that we don't care about.
+	// This is unlikely to change in the future
+	const shadowMovesCount = 18;
+
 	console.log(
-		`Last Move API Entry is ${JSON.stringify(apiResponseBody.count)}`
+		`  OK: Last API Move Entry is ${JSON.stringify(apiResponseBody.count - shadowMovesCount)}`
 	);
+
 
 	return {
 		lastMoveDbEntry:
 			lastDBMoveEntry.length !== 0 ? lastDBMoveEntry[0].move_id : 0,
-		lastMoveAPIEntry: apiResponseBody.count,
+		lastMoveAPIEntry: apiResponseBody.count - shadowMovesCount,
 	};
 }
 
 async function sendSQSMessage(client, message) {
+	console.log('\nSending SQS message:', message);
 	try {
 		const command = new SendMessageCommand({
 			QueueUrl: process.env.QUEUE_URL,
@@ -183,9 +195,9 @@ async function sendSQSMessage(client, message) {
 		});
 
 		const response = await client.send(command);
-		console.log(response);
+		console.log('  OK');
 	} catch (err) {
-		console.error(`Failed to send message to queue: ${err}`);
+		console.error(`  Error: ${err}`);
 	}
 }
 

@@ -22,9 +22,11 @@ Once the Pocketbase entry is update, the worker's repsonsibility ends. It is not
 
 ### SQS Formats
 
-| Sample body          | Meaning       | API Endpoint                  |
-| -------------------- | ------------- | ----------------------------- |
-| `{ pokemonEntry: 1}` | Pokemon Names | /api/v2/pokemon-species/${id} |
+| Sample body          | Meaning       | API Endpoint                           |
+| -------------------- | ------------- | -------------------------------------- |
+| `{ pokemonEntry: 1}` | Pokemon Names | /api/v2/pokemon-species/${id}          |
+| `{ pokemonExtra: 1}` | Pokemon Names | /api/v2/pokemon-species/${id >= 10000} |
+| `{ moveEntry: 1}`    | Move Names    | /api/v2/move/${id >= 10000}            |
 
 ## redeploy
 
